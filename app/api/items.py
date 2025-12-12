@@ -246,7 +246,7 @@ async def run_task(request: Request):
 
     try:
         await poller.run_once()
-    except Exception as exc:
+    except Exception:
         raise HTTPException(
             status_code=500,
             detail="Ошибка при выполнении задач"

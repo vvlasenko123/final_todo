@@ -47,6 +47,10 @@ async def on_message(msg):
                 db.add(new)
                 await db.commit()
                 await db.refresh(new)
+                print(
+                    f"Создан элемент из NATS: {item_data.get('code')}",
+                    flush=True
+                )
             else:
                 item.rate = item_data["rate"]
                 item.nominal = item_data["nominal"]
@@ -54,6 +58,10 @@ async def on_message(msg):
                 item.is_crypto = item_data["is_crypto"]
                 await db.commit()
                 await db.refresh(item)
+                print(
+                    f"Обновлён элемент из NATS: {code}",
+                    flush=True
+                )
         finally:
             break
 
@@ -76,3 +84,4 @@ class NatsSubscriber:
         await nats_client.connect(servers=self._servers)
         self._nats_client = nats_client
         await nats_client.subscribe("items.updates", cb=on_message)
+        print(f"NATS подписался", flush=True)

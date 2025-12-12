@@ -17,6 +17,7 @@ class NatsPublisher:
             nats_client = Nats()
             await nats_client.connect(servers=self._servers)
             self._nats_client = nats_client
+            print(f"NATS publisher подключен, servers={self._servers}", flush=True)
 
 
     async def close(self):
@@ -26,12 +27,13 @@ class NatsPublisher:
             try:
                 await self._nats_client.drain()
             except Exception:
-                pass
+                print("Ошибка NATS клиента", flush=True)
             try:
                 await self._nats_client.close()
             except Exception:
-                pass
+                print("Ошибка при закрытии NATS клиента", flush=True)
             self._nats_client = None
+            print("NATS publisher отключен", flush=True)
 
 
     async def publish(self, subject: str, message: dict):
@@ -39,4 +41,9 @@ class NatsPublisher:
             await self.connect()
 
         payload = (json.dumps(message).encode("utf-8"))
-        await self._nats_client.publish(subject, payload)
+        try:
+            await self._nats_client.publish(subject, payload)
+            print(f"Опубликовано в NATS: {subject}, message={message}", flush=True)
+        except Exception:
+            print(f"Ошибка при публикации в NATS: {subject}", flush=True)
+            raise
