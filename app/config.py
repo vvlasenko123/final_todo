@@ -1,0 +1,11 @@
+DATABASE_URL = "sqlite+aiosqlite:///./money-parser.db"
+POLL_INTERVAL_SECONDS = 30
+USER_AGENT = "money-parser/1.0"
+CBR_URL = "https://www.cbr.ru/scripts/XML_daily.asp"
+BINANCE_URL = "https://api.binance.com/api/v3/ticker/price"
+CBR_SOURCE = "ЦБ РФ"
+MONEY = ("USD", "EUR", "JPY")
+CRYPTO_CODES = ("BTC", "ETH")
+CRYPTO_SOURCE = "Binance"
+DEFAULT_TIMEOUT = 10
+NATS_SERVERS = ["nats://127.0.0.1:4222"]
