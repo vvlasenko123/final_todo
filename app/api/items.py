@@ -4,6 +4,7 @@ from fastapi.encoders import jsonable_encoder
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette import status
+from app.config import DEFAULT_TIMEOUT
 from app.db.session import get_db
 from app.models.item import ItemModel
 from app.models.pydantic_items import Item, ItemCreate, ItemUpdate
@@ -133,7 +134,11 @@ async def create_item(item: ItemCreate, request: Request, db: AsyncSession = Dep
         "item": jsonable_encoder(new_item)
     }
     try:
-        await manager.broadcast(payload)
+        client_present = await manager.wait_for_clients(timeout=DEFAULT_TIMEOUT)
+        if not client_present:
+            print("Нет WebSocket клиентов после ожидания 10 секунд", flush=True)
+        else:
+            await manager.broadcast(payload)
     except Exception:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -184,10 +189,14 @@ async def patch_item(item_id: int, patch: ItemUpdate, db: AsyncSession = Depends
         await db.commit()
         await db.refresh(item)
         try:
-            await manager.broadcast({
-                "type": "updated",
-                "item": jsonable_encoder(item)
-            })
+            client_present = await manager.wait_for_clients(timeout=DEFAULT_TIMEOUT)
+            if not client_present:
+                print("Нет WebSocket клиентов после ожидания 10 секунд", flush=True)
+            else:
+                await manager.broadcast({
+                    "type": "updated",
+                    "item": jsonable_encoder(item)
+                })
         except Exception:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -210,10 +219,14 @@ async def delete_item(item_id: int, db: AsyncSession = Depends(get_db)):
     await db.commit()
 
     try:
-        await manager.broadcast({
-            "type": "deleted",
-            "id": item_id
-        })
+        client_present = await manager.wait_for_clients(timeout=DEFAULT_TIMEOUT)
+        if not client_present:
+            print("Нет WebSocket клиентов после ожидания 10 секунд", flush=True)
+        else:
+            await manager.broadcast({
+                "type": "deleted",
+                "id": item_id
+            })
     except Exception:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -223,15 +236,26 @@ async def delete_item(item_id: int, db: AsyncSession = Depends(get_db)):
 
 @router.websocket("/ws/items")
 async def ws_items(ws: WebSocket):
+    print(
+        "WebSocket вызван, manager_id=", id(manager), "client=", getattr(ws, "client", None),
+        flush=True
+    )
     await manager.connect(ws)
     try:
         while True:
             try:
-                await ws.receive_text()
+                text = await ws.receive_text()
+                print("WebSocker ресейвит текст:", getattr(ws, "client", None), "text=", text, flush=True)
             except WebSocketDisconnect:
+                print("WebSocketDisconnect", flush=True)
+                break
+            except Exception as e:
+                print("WebSocket error:", e, flush=True)
                 break
     finally:
         manager.disconnect(ws)
+        print("WS handler finished for client=", getattr(ws, "client", None), flush=True)
+
 
 
 @router.post("/tasks/run", status_code=status.HTTP_202_ACCEPTED)

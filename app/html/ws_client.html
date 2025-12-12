@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <title>WS тест-клиент</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 16px; }
+    fieldset { margin-bottom: 12px; }
+    label { display:block; margin:6px 0 2px; }
+    input[type="text"], input[type="number"] { width: 300px; padding:6px; }
+    button { margin-top:8px; padding:6px 10px; }
+    #log { white-space: pre-wrap; background:#f7f7f7; padding:10px; height:300px; overflow:auto; border:1px solid #ddd; }
+    .row { display:flex; gap:8px; align-items:center; }
+  </style>
+</head>
+<body>
+  <h2>WebSocket</h2>
+
+  <div class="row">
+    <strong>WS статус:</strong> <span id="ws-status">...подключение...</span>
+    <button id="reconnect">Переподключить WS</button>
+  </div>
+
+  <fieldset>
+    <legend>Создать элемент (POST /items)</legend>
+    <label>Код (code)</label>
+    <input id="create-code" type="text" placeholder="ABC" />
+    <label>Название (title)</label>
+    <input id="create-title" type="text" placeholder="Название" />
+    <label>Цена (rate)</label>
+    <input id="create-rate" type="number" step="any" value="1" />
+    <label>Номинал (nominal)</label>
+    <input id="create-nominal" type="number" value="1" />
+    <label>Источник (source)</label>
+    <input id="create-source" type="text" placeholder="Binance" />
+    <label><input id="create-iscrypto" type="checkbox" /> is_crypto</label>
+    <br/>
+    <button id="btn-create">Создать</button>
+  </fieldset>
+
+  <fieldset>
+    <legend>Изменить элемент (PATCH /items/{id})</legend>
+    <label>ID элемента</label>
+    <input id="update-id" type="number" placeholder="id" />
+    <label>Название (title)</label>
+    <input id="update-title" type="text" placeholder="новое название (опционально)" />
+    <label>Цена (rate)</label>
+    <input id="update-rate" type="number" step="any" placeholder="опционально" />
+    <label>Номинал (nominal)</label>
+    <input id="update-nominal" type="number" placeholder="опционально" />
+    <label>Источник (source)</label>
+    <input id="update-source" type="text" placeholder="опционально" />
+    <label><input id="update-iscrypto" type="checkbox" /> is_crypto (установить/снять)</label>
+    <br/>
+    <button id="btn-update">Изменить</button>
+  </fieldset>
+
+  <fieldset>
+    <legend>Удалить элемент (DELETE /items/{id})</legend>
+    <label>ID элемента</label>
+    <input id="delete-id" type="number" placeholder="id" />
+    <br/>
+    <button id="btn-delete">Удалить</button>
+  </fieldset>
+
+  <h3>Лог</h3>
+  <div id="log"></div>
+
+<script>
+const baseUrl = `${location.protocol}//${location.hostname}:8000`;
+const wsUrl = `ws://${location.hostname}:8000/ws/items`;
+const logEl = document.getElementById('log');
+const wsStatusEl = document.getElementById('ws-status');
+
+function log(msg) {
+  const time = new Date().toISOString().replace('T',' ').replace('Z','');
+  logEl.textContent = `[${time}] ${msg}\n` + logEl.textContent;
+}
+
+let ws = null;
+function connectWS() {
+  if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+    log('WS уже подключён или в процессе подключения');
+    return;
+  }
+  ws = new WebSocket(wsUrl);
+
+  ws.onopen = () => {
+    wsStatusEl.textContent = 'Открыто';
+    log('WebSocket соединение открыто');
+  };
+
+  ws.onmessage = (ev) => {
+    try {
+      const data = JSON.parse(ev.data);
+      log('Получено (WS): ' + JSON.stringify(data));
+    } catch (err) {
+      log('Получено (WS, raw): ' + ev.data);
+    }
+  };
+
+  ws.onclose = () => {
+    wsStatusEl.textContent = 'Закрыто';
+    log('WebSocket соединение закрыто');
+  };
+
+  ws.onerror = (e) => {
+    wsStatusEl.textContent = 'Ошибка';
+    log('WebSocket ошибка');
+    console.error(e);
+  };
+}
+
+document.getElementById('reconnect').addEventListener('click', () => {
+  if (ws) {
+    try { ws.close(); } catch(e) {}
+  }
+  connectWS();
+});
+
+connectWS();
+
+async function doFetch(path, method='GET', body=null) {
+  const url = baseUrl + path;
+  const opts = {
+    method,
+    headers: { 'Content-Type': 'application/json' }
+  };
+  if (body !== null) opts.body = JSON.stringify(body);
+  try {
+    const res = await fetch(url, opts);
+    const text = await res.text();
+    let data = text;
+    try { data = JSON.parse(text); } catch {}
+    log(`HTTP ${method} ${path} -> status ${res.status}, body: ${JSON.stringify(data)}`);
+    return { ok: res.ok, status: res.status, body: data };
+  } catch (err) {
+    log(`Ошибка fetch ${method} ${path}: ${err}`);
+    return { ok: false, status: 0, body: null };
+  }
+}
+
+document.getElementById('btn-create').addEventListener('click', async () => {
+  const code = document.getElementById('create-code').value.trim();
+  const title = document.getElementById('create-title').value.trim();
+  const rate = parseFloat(document.getElementById('create-rate').value || '0');
+  const nominal = parseInt(document.getElementById('create-nominal').value || '1', 10);
+  const source = document.getElementById('create-source').value.trim();
+  const is_crypto = document.getElementById('create-iscrypto').checked;
+
+  if (!code) { log('Ошибка: укажите code'); return; }
+  if (!title) { log('Ошибка: укажите title'); return; }
+
+  const payload = { code, title, rate, nominal, source, is_crypto };
+  log('POST /items payload: ' + JSON.stringify(payload));
+  await doFetch('/items', 'POST', payload);
+});
+
+document.getElementById('btn-update').addEventListener('click', async () => {
+  const id = document.getElementById('update-id').value;
+  if (!id) { log('Ошибка: укажите id для обновления'); return; }
+  const body = {};
+  const title = document.getElementById('update-title').value.trim();
+  const rateStr = document.getElementById('update-rate').value;
+  const nominalStr = document.getElementById('update-nominal').value;
+  const source = document.getElementById('update-source').value.trim();
+  const is_crypto_checked = document.getElementById('update-iscrypto').checked;
+
+  if (title) body.title = title;
+  if (rateStr !== '') body.rate = parseFloat(rateStr);
+  if (nominalStr !== '') body.nominal = parseInt(nominalStr, 10);
+  if (source) body.source = source;
+  if (document.getElementById('update-iscrypto').indeterminate === false) {
+    body.is_crypto = is_crypto_checked;
+  } else {
+    body.is_crypto = is_crypto_checked;
+  }
+
+  if (Object.keys(body).length === 0) {
+    log('Нечего обновлять: заполните хотя бы одно поле');
+    return;
+  }
+
+  log(`PATCH /items/${id} payload: ${JSON.stringify(body)}`);
+  await doFetch(`/items/${id}`, 'PATCH', body);
+});
+
+document.getElementById('btn-delete').addEventListener('click', async () => {
+  const id = document.getElementById('delete-id').value;
+  if (!id) { log('Ошибка: укажите id для удаления'); return; }
+  log(`DELETE /items/${id}`);
+  await doFetch(`/items/${id}`, 'DELETE');
+});
+</script>
+</body>
+</html>
