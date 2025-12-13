@@ -134,11 +134,7 @@ async def create_item(item: ItemCreate, request: Request, db: AsyncSession = Dep
         "item": jsonable_encoder(new_item)
     }
     try:
-        client_present = await manager.wait_for_clients(timeout=DEFAULT_TIMEOUT)
-        if not client_present:
-            print("Нет WebSocket клиентов после ожидания 10 секунд", flush=True)
-        else:
-            await manager.broadcast(payload)
+        await manager.broadcast(payload)
     except Exception:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -156,7 +152,6 @@ async def create_item(item: ItemCreate, request: Request, db: AsyncSession = Dep
             )
 
     return new_item
-
 
 @router.patch("/items/{item_id}", response_model=Item)
 async def patch_item(item_id: int, patch: ItemUpdate, db: AsyncSession = Depends(get_db)):
@@ -189,14 +184,10 @@ async def patch_item(item_id: int, patch: ItemUpdate, db: AsyncSession = Depends
         await db.commit()
         await db.refresh(item)
         try:
-            client_present = await manager.wait_for_clients(timeout=DEFAULT_TIMEOUT)
-            if not client_present:
-                print("Нет WebSocket клиентов после ожидания 10 секунд", flush=True)
-            else:
-                await manager.broadcast({
-                    "type": "updated",
-                    "item": jsonable_encoder(item)
-                })
+            await manager.broadcast({
+                "type": "updated",
+                "item": jsonable_encoder(item)
+            })
         except Exception:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -219,14 +210,10 @@ async def delete_item(item_id: int, db: AsyncSession = Depends(get_db)):
     await db.commit()
 
     try:
-        client_present = await manager.wait_for_clients(timeout=DEFAULT_TIMEOUT)
-        if not client_present:
-            print("Нет WebSocket клиентов после ожидания 10 секунд", flush=True)
-        else:
-            await manager.broadcast({
-                "type": "deleted",
-                "id": item_id
-            })
+        await manager.broadcast({
+            "type": "deleted",
+            "id": item_id
+        })
     except Exception:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
